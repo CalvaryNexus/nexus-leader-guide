@@ -382,3 +382,6 @@ button { font-family: inherit; }
   .ed-bar .actions { margin-left: auto; }
   .ed-more { flex-wrap: wrap; gap: 6px; }
 }
+
+/* inline "start a new series" in Week basics */
+.block-card.new-series { margin-top: 14px; background: var(--card); border-color: var(--card-line); }

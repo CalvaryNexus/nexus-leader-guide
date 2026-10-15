@@ -12,6 +12,7 @@ import {
   getPreviousWeek,
   getSeries,
   getWeek,
+  listSeries,
   saveSettings,
   saveTemplate,
   saveWeek,
@@ -20,7 +21,7 @@ import {
   unfreezeSchedule,
   updateSeriesInfo,
 } from "@/lib/data";
-import type { ScheduleRow, SiteSettings, Week, WeekInput } from "@/lib/types";
+import type { ScheduleRow, Series, SiteSettings, Week, WeekInput } from "@/lib/types";
 
 async function requireAdmin() {
   const token = (await cookies()).get(ADMIN_COOKIE)?.value;
@@ -152,6 +153,23 @@ export async function createSeriesAction(form: FormData) {
   const id = await createSeries(name, String(form.get("reference") ?? ""));
   refreshAll();
   redirect(`/admin/series?id=${id}&created=1`);
+}
+
+/** Start a series from the week editor. Returns the refreshed series list so the editor can switch to it. */
+export async function createSeriesInlineAction(
+  name: string,
+  reference: string,
+): Promise<{ ok: true; id: number; series: Series[] } | { ok: false; error: string }> {
+  await requireAdmin();
+  const clean = name.trim();
+  if (!clean) return { ok: false, error: "Give the series a name." };
+  const existing = await listSeries();
+  if (existing.some((s) => s.name.trim().toLowerCase() === clean.toLowerCase())) {
+    return { ok: false, error: `A series named "${clean}" already exists. Pick it from the list instead.` };
+  }
+  const id = await createSeries(clean, reference);
+  refreshAll();
+  return { ok: true, id, series: await listSeries() };
 }
 
 export async function setActiveSeriesAction(form: FormData) {

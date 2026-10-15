@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { publishWeekAction, saveWeekAction, unfreezeAction, unpublishWeekAction } from "@/app/admin/actions";
+import { createSeriesInlineAction, publishWeekAction, saveWeekAction, unfreezeAction, unpublishWeekAction } from "@/app/admin/actions";
 import { runChecks, type CheckWarning } from "@/lib/checks";
 import { dateLong } from "@/lib/format";
 import { buildGuideView, renderGuideDocument } from "@/lib/render/guide";
@@ -48,7 +48,7 @@ type Props = {
   autoPublish: boolean;
 };
 
-export function WeekEditor({ initialWeek, seriesList, prevWeek, footer, isLive, autoPublish }: Props) {
+export function WeekEditor({ initialWeek, seriesList: seriesProp, prevWeek, footer, isLive, autoPublish }: Props) {
   const id = initialWeek.id;
   const [form, setForm] = useState<WeekInput>(() => toInput(initialWeek));
   const [savedJson, setSavedJson] = useState(() => JSON.stringify(toInput(initialWeek)));
@@ -59,6 +59,10 @@ export function WeekEditor({ initialWeek, seriesList, prevWeek, footer, isLive, 
   const [dialog, setDialog] = useState<CheckWarning[] | null>(null);
   const [view, setView] = useState<"edit" | "preview">("edit");
   const [newKind, setNewKind] = useState("game");
+  // Series can be started right here in Week basics, so the list lives in state.
+  const [seriesList, setSeriesList] = useState(seriesProp);
+  const [newSeries, setNewSeries] = useState<{ name: string; reference: string; busy: boolean; error: string | null } | null>(null);
+  useEffect(() => setSeriesList(seriesProp), [seriesProp]);
   const formRef = useRef(form);
   formRef.current = form;
   const barRef = useRef<HTMLDivElement>(null);
@@ -289,7 +293,14 @@ export function WeekEditor({ initialWeek, seriesList, prevWeek, footer, isLive, 
               <div className="field-grid basics">
                 <label className="field">
                   <span className="label">Series</span>
-                  <select className="select" value={form.series_id} onChange={(e) => set("series_id", Number(e.target.value))}>
+                  <select
+                    className="select"
+                    value={form.series_id}
+                    onChange={(e) => {
+                      if (e.target.value === "new") setNewSeries({ name: "", reference: "", busy: false, error: null });
+                      else set("series_id", Number(e.target.value));
+                    }}
+                  >
                     {seriesList.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name}
@@ -297,6 +308,7 @@ export function WeekEditor({ initialWeek, seriesList, prevWeek, footer, isLive, 
                         {s.active ? "" : " (inactive)"}
                       </option>
                     ))}
+                    <option value="new">+ Start a new series...</option>
                   </select>
                 </label>
                 <label className="field">
@@ -315,6 +327,69 @@ export function WeekEditor({ initialWeek, seriesList, prevWeek, footer, isLive, 
                   <input className="input" type="date" value={form.service_date} onChange={(e) => set("service_date", e.target.value)} required />
                 </label>
               </div>
+              {newSeries ? (
+                <form
+                  className="block-card new-series"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!newSeries.name.trim() || newSeries.busy) return;
+                    setNewSeries({ ...newSeries, busy: true, error: null });
+                    const res = await createSeriesInlineAction(newSeries.name, newSeries.reference);
+                    if (!res.ok) return setNewSeries({ ...newSeries, busy: false, error: res.error });
+                    const created = res.series.find((s) => s.id === res.id);
+                    setSeriesList(res.series);
+                    // A new series starts at Week 1.
+                    setForm((f) => ({ ...f, series_id: res.id, week_number: 1 }));
+                    setNewSeries(null);
+                    showToast(`${created?.name ?? "Series"} created. This week is now Week 1 of it. Save to keep the change.`);
+                  }}
+                >
+                  <div className="block-head">
+                    <span className="label">Start a new series</span>
+                  </div>
+                  {newSeries.error && (
+                    <p className="alert err" role="alert" style={{ margin: "0 0 12px" }}>
+                      {newSeries.error}
+                    </p>
+                  )}
+                  <div className="field-grid two">
+                    <TextField
+                      label="Series name"
+                      value={newSeries.name}
+                      onChange={(v) => setNewSeries((n) => (n ? { ...n, name: v } : n))}
+                      placeholder="e.g. Wilderness"
+                      autoFocus
+                    />
+                    <TextField
+                      label="Reference"
+                      value={newSeries.reference}
+                      onChange={(v) => setNewSeries((n) => (n ? { ...n, reference: v } : n))}
+                      placeholder="Optional, e.g. John 15"
+                    />
+                  </div>
+                  <p className="hint" style={{ margin: "10px 0 12px" }}>
+                    Starts with a copy of the {seriesList.find((s) => s.active)?.name ?? "current"} schedule template and becomes the active series,
+                    so &ldquo;Duplicate last week&rdquo; continues in it. This week moves into it as Week 1.
+                  </p>
+                  <div className="btn-row">
+                    <button type="submit" className="btn sm" disabled={!newSeries.name.trim() || newSeries.busy}>
+                      {newSeries.busy ? "Creating..." : "Create series"}
+                    </button>
+                    <button type="button" className="btn quiet sm" onClick={() => setNewSeries(null)} disabled={newSeries.busy}>
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <button
+                  type="button"
+                  className="btn quiet sm"
+                  style={{ marginTop: 8, paddingLeft: 0 }}
+                  onClick={() => setNewSeries({ name: "", reference: "", busy: false, error: null })}
+                >
+                  + Start a new series
+                </button>
+              )}
               <div className="field" style={{ marginTop: 14 }}>
                 <span className="label">Hero line</span>
                 <div className="hero-line">
