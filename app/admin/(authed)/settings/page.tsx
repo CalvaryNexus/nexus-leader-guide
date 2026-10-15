@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { SettingsForm } from "@/components/admin/SettingsForm";
 import { getSettings } from "@/lib/data";
 
 export const metadata: Metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
+  await connection();
   const settings = await getSettings();
   return (
     <main className="page" style={{ maxWidth: 820 }}>

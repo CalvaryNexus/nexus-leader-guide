@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { connection } from "next/server";
 import { createWeekAction, deleteWeekFormAction, unpublishFormAction } from "@/app/admin/actions";
 import { ConfirmSubmit } from "@/components/admin/ConfirmSubmit";
 import { CopyButton } from "@/components/admin/CopyButton";
@@ -6,6 +7,7 @@ import { getActiveSeries, getSettings, listWeeks } from "@/lib/data";
 import { dateShort } from "@/lib/format";
 
 export default async function WeeksPage() {
+  await connection(); // pages render alongside the layout, so opt out of build-time rendering before any query
   const [weeks, settings, active, h] = await Promise.all([listWeeks(), getSettings(), getActiveSeries(), headers()]);
   const origin = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
   const current = weeks.find((w) => w.published);
